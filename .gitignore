@@ -30,3 +30,7 @@ chat_log_*.txt
 
 # Streamlit 密钥配置
 .streamlit/secrets.toml
+
+# 本地开发测试与草稿文件
+test_embed.py
+study_assistant_dev优化.md
