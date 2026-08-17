@@ -99,7 +99,17 @@ if prompt := st.chat_input("请输入您的问题（如：帮我总结这篇论�
     with st.chat_message("assistant"):
         with st.spinner("思考中..."):
             try:
-                response = st.session_state.agent.chat(prompt)
+                # 注入已加载文献列表，让模型获取可用的PDF及完整路径
+                loaded_info = "【系统：当前已加载的PDF文献列表】\n"
+                if st.session_state.loaded_pdfs:
+                    for idx, path in enumerate(st.session_state.loaded_pdfs):
+                        display_name = os.path.basename(path).split("_", 1)[-1]
+                        loaded_info += f"{idx+1}. 文件名：{display_name}\n   文件路径：{path}\n"
+                else:
+                    loaded_info += "当前暂无已加载的PDF文献。\n"
+                loaded_info += "\n用户问题：" + prompt
+                
+                response = st.session_state.agent.chat(loaded_info)
             except Exception as e:
                 response = f"❌ 发生错误：{str(e)}"
         st.markdown(response)

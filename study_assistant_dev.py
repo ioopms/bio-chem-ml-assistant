@@ -302,18 +302,34 @@ class StudyAgent:
 8. 每次任务结束后，主动询问是否需要保存笔记。
 9. 当用户提到图像分类、目标检测等任务时，可以生成利用 torchvision 或 opencv 的代码，并通过 run_safe_python 执行，前提是用户已提供图像路径。
 10. 遇到未知专业术语，优先调用全局文献库检索，或使用可信知识解释。
+11. 参考对话开头的【当前已加载的PDF文献列表】获取所有可用的文献完整路径。
+12. 当仅加载1篇PDF，且用户提到「这篇论文」「该文献」等指代时，直接使用该PDF路径调用 rag_query，禁止反问用户索要路径。
+13. 当加载多篇PDF且用户未指定具体篇目时：
+    - 若为跨文献总结、对比分析类需求，优先调用 global_rag_query 进行全局检索；
+    - 若为单篇精读需求，再询问用户具体指定哪一篇。
+14. 调用 rag_query 时必须使用列表中给出的完整文件路径，不得自行编造路径。
 """
         self.messages = [{"role": "system", "content": self.system_prompt}]
-        self.max_messages_before_compression = 20
+        self.max_messages_before_compression = 30
 
     def _compress_history(self):
-        """压缩早期对话为上下文摘要，保留最近 6 条消息"""
+        """压缩早期对话为上下文摘要，保留最近消息，保证工具调用消息对完整不被截断"""
         if len(self.messages) <= self.max_messages_before_compression:
             return
-        # 分离 system 消息和后面的对话
+
         system_msg = self.messages[0]
-        history = self.messages[1:-6]   # 要压缩的部分
-        recent = self.messages[-6:]     # 保留最近 6 条（含 user/assistant/tool）
+        # 保留最近 8 条消息，增大缓冲减少切断概率
+        keep_count = 8
+        recent = self.messages[-keep_count:]
+
+        # 关键修复：如果保留的第一条是 tool 消息，说明被截断了，往前多保留1条对应的助手调用消息
+        while recent and recent[0]["role"] == "tool":
+            keep_count += 1
+            recent = self.messages[-keep_count:]
+
+        # 待压缩的历史：系统消息之后、保留部分之前的所有消息
+        history = self.messages[1:-keep_count]
+
         # 构建摘要请求
         summary_prompt = "请将以下学习对话历史压缩为一段简洁的上下文摘要，保留关键概念、结论和未解决的问题：\n"
         for m in history:
@@ -322,6 +338,7 @@ class StudyAgent:
             elif m['role'] == 'assistant' and m.get('content'):
                 summary_prompt += f"智能体：{m['content']}\n"
         summary_prompt += "\n摘要："
+
         try:
             resp = client.chat.completions.create(
                 model=MODEL,
@@ -349,7 +366,11 @@ class StudyAgent:
             )
             msg_obj = resp.choices[0].message
             # 将API返回的对象转为标准字典，保证消息列表格式统一
-            msg_dict = msg_obj.model_dump()
+            # 转为标准字典，自动排除空值字段
+            msg_dict = msg_obj.model_dump(exclude_none=True)
+            # 双重保险：无工具调用时彻底移除 tool_calls 字段
+            if "tool_calls" in msg_dict and not msg_dict["tool_calls"]:
+                del msg_dict["tool_calls"]
             
             if not msg_obj.tool_calls:
                 self.messages.append(msg_dict)
