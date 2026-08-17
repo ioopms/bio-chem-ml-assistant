@@ -1,0 +1,32 @@
+# 敏感密钥配置（严禁上传）
+.env
+.env.local
+
+# 临时上传的PDF文件
+temp_uploads/
+
+# 本地向量库数据
+chroma_db/
+
+# 个人笔记归档
+study_notes/
+
+# Python 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+
+# 虚拟环境
+venv/
+.venv/
+
+# IDE 配置
+.vscode/
+.idea/
+
+# 对话日志
+*.log
+chat_log_*.txt
+
+# Streamlit 密钥配置
+.streamlit/secrets.toml
